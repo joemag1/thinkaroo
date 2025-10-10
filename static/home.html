@@ -12,8 +12,8 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+            background: #f5f5f5;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -22,105 +22,89 @@
         }
 
         .container {
-            background: white;
-            border-radius: 20px;
-            padding: 60px 40px;
-            max-width: 800px;
+            max-width: 900px;
             width: 100%;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            text-align: center;
         }
 
         h1 {
             font-size: 3.5em;
-            color: #667eea;
-            margin-bottom: 20px;
-            font-weight: 700;
-            letter-spacing: -1px;
+            color: #1a1a1a;
+            margin-bottom: 12px;
+            font-weight: 300;
+            letter-spacing: -2px;
+            text-align: center;
         }
 
         .tagline {
-            font-size: 1.3em;
+            font-size: 1.1em;
             color: #666;
-            margin-bottom: 50px;
-            line-height: 1.6;
+            margin-bottom: 60px;
+            text-align: center;
+            font-weight: 400;
         }
 
         .buttons-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-top: 40px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
         }
 
         .section-button {
-            display: block;
-            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 48px 32px;
             text-decoration: none;
-            border-radius: 15px;
-            font-size: 1.4em;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            border: none;
-            cursor: pointer;
-        }
-
-        .section-button::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(-100%);
-            transition: transform 0.3s ease;
-        }
-
-        .section-button:hover::before {
-            transform: translateX(0);
+            background: white;
+            border-radius: 12px;
+            transition: all 0.2s ease;
+            border: 1px solid #e0e0e0;
+            min-height: 200px;
         }
 
         .section-button:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-        }
-
-        .math-button {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-        }
-
-        .reading-button {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-        }
-
-        .vocabulary-button {
-            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-            color: white;
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+            border-color: #d0d0d0;
         }
 
         .icon {
-            display: block;
-            font-size: 2em;
-            margin-bottom: 10px;
+            font-size: 3em;
+            margin-bottom: 16px;
+            filter: grayscale(20%);
         }
 
-        @media (max-width: 600px) {
+        .section-title {
+            font-size: 1.5em;
+            font-weight: 500;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+        }
+
+        .section-description {
+            font-size: 0.9em;
+            color: #888;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
             h1 {
                 font-size: 2.5em;
             }
 
             .tagline {
-                font-size: 1.1em;
+                font-size: 1em;
+                margin-bottom: 40px;
+            }
+
+            .buttons-container {
+                grid-template-columns: 1fr;
             }
 
             .section-button {
-                padding: 25px 15px;
-                font-size: 1.2em;
+                padding: 40px 24px;
             }
         }
     </style>
@@ -128,22 +112,25 @@
 <body>
     <div class="container">
         <h1>thinkaroo</h1>
-        <p class="tagline">Welcome to your AI-driven test preparation software.<br>Choose a section to begin your practice session.</p>
+        <p class="tagline">AI-driven test preparation for young learners</p>
 
         <div class="buttons-container">
-            <a href="/math.html" class="section-button math-button">
+            <a href="/math.html" class="section-button">
                 <span class="icon">➕</span>
-                Math
+                <div class="section-title">Math</div>
+                <div class="section-description">Practice problems and exercises</div>
             </a>
 
-            <a href="/reading.html" class="section-button reading-button">
+            <a href="/reading.html" class="section-button">
                 <span class="icon">📖</span>
-                Reading
+                <div class="section-title">Reading</div>
+                <div class="section-description">Comprehension and analysis</div>
             </a>
 
-            <a href="/vocabulary.html" class="section-button vocabulary-button">
+            <a href="/vocabulary.html" class="section-button">
                 <span class="icon">📝</span>
-                Vocabulary
+                <div class="section-title">Vocabulary</div>
+                <div class="section-description">Words and meanings</div>
             </a>
         </div>
     </div>
