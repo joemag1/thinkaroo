@@ -158,14 +158,31 @@
         }
 
         .loading {
+            background: white;
+            border-radius: 12px;
+            padding: 80px 40px;
+            border: 1px solid #e0e0e0;
             text-align: center;
-            padding: 60px 20px;
             color: #888;
         }
 
         .loading-spinner {
-            font-size: 2em;
-            margin-bottom: 16px;
+            width: 48px;
+            height: 48px;
+            border: 4px solid #f0f0f0;
+            border-top-color: #666;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 24px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 1.1em;
+            color: #888;
         }
 
         @media (max-width: 768px) {
@@ -213,40 +230,33 @@
 
         <div id="content">
             <div class="loading">
-                <div class="loading-spinner">⏳</div>
-                <div>Loading your reading passage...</div>
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Loading your reading passage...</div>
             </div>
         </div>
     </div>
 
     <script>
-        // This will be populated with dynamic content generation later
-        function loadReadingSession() {
-            // Placeholder for AI-generated content
-            const storyData = {
-                title: "Sample Story Title",
-                content: [
-                    "This is a placeholder paragraph. The actual story content will be generated dynamically using JavaScript.",
-                    "More story content will appear here once we implement the AI generation functionality.",
-                    "For now, this demonstrates the layout and structure of the reading comprehension page."
-                ],
-                questions: [
-                    {
-                        id: 1,
-                        text: "What is the main idea of the passage?"
-                    },
-                    {
-                        id: 2,
-                        text: "What can you infer about the characters in the story?"
-                    },
-                    {
-                        id: 3,
-                        text: "How would you describe the tone of this passage?"
-                    }
-                ]
-            };
+        async function loadReadingSession() {
+            try {
+                const response = await fetch('/reading_contents');
 
-            renderContent(storyData);
+                if (!response.ok) {
+                    throw new Error('Failed to load reading content');
+                }
+
+                const data = await response.json();
+                renderContent(data);
+            } catch (error) {
+                console.error('Error loading reading content:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="loading">
+                        <div class="loading-text" style="color: #d32f2f;">
+                            Failed to load reading passage. Please try again.
+                        </div>
+                    </div>
+                `;
+            }
         }
 
         function renderContent(data) {
@@ -254,9 +264,9 @@
 
             const storyHTML = `
                 <div class="story-section">
-                    <h2 class="story-title">${data.title}</h2>
+                    <h2 class="story-title">${escapeHtml(data.title)}</h2>
                     <div class="story-content">
-                        ${data.content.map(p => `<p>${p}</p>`).join('')}
+                        <p>${escapeHtml(data.story)}</p>
                     </div>
                 </div>
             `;
@@ -264,15 +274,15 @@
             const questionsHTML = `
                 <div class="questions-section">
                     <h2 class="questions-header">Questions</h2>
-                    ${data.questions.map(q => `
+                    ${data.questions.map((question, index) => `
                         <div class="question">
                             <div class="question-text">
-                                <span class="question-number">${q.id}.</span>
-                                ${q.text}
+                                <span class="question-number">${index + 1}.</span>
+                                ${escapeHtml(question)}
                             </div>
                             <textarea
                                 class="answer-input"
-                                id="answer-${q.id}"
+                                id="answer-${index + 1}"
                                 placeholder="Type your answer here..."
                             ></textarea>
                         </div>
@@ -282,6 +292,12 @@
             `;
 
             contentDiv.innerHTML = storyHTML + questionsHTML;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         function submitAnswers() {
