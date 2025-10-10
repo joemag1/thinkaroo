@@ -1,3 +1,4 @@
+use std::time::Duration;
 use axum::{
     body::Body,
     http::{header, StatusCode},
@@ -7,11 +8,13 @@ use axum::{
 };
 use serde::Serialize;
 use tokio::fs::File;
+use tokio::time::sleep;
 use tokio_util::io::ReaderStream;
 use tracing::{error, info};
 
 #[derive(Serialize)]
 struct ReadingContents {
+    title: String,
     story: String,
     questions: Vec<String>,
 }
@@ -52,8 +55,12 @@ async fn reading() -> Result<Response, (StatusCode, String)> {
 }
 
 async fn reading_contents() -> Json<ReadingContents> {
+    // todo: remove once we load actual contents.
+    sleep(Duration::from_secs(5)).await;
+
     // Placeholder implementation - will be replaced with AI generation later
     let contents = ReadingContents {
+        title: "A story to behold".into(),
         story: "Once upon a time, in a small village nestled between rolling hills, there lived a curious young girl named Maya. Every day after school, she would explore the forests near her home, discovering new plants and animals. One afternoon, Maya stumbled upon a hidden grove where butterflies of every color danced among wildflowers. She sat quietly, watching them for hours, learning their patterns and behaviors. From that day forward, Maya knew she wanted to become a scientist who studied nature.".to_string(),
         questions: vec![
             "What is the main character's name?".to_string(),
