@@ -9,6 +9,7 @@ static PROMPTS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/prompts");
 pub struct PromptConfig {
     pub name: String,
     pub description: String,
+    pub model: String,
     pub prompt: PromptText,
 }
 

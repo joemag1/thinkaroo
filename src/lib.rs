@@ -10,6 +10,12 @@ pub enum ServiceError {
     #[error("S3 error: {0}")]
     S3Error(String),
 
+    #[error("OpenAI API error: {0}")]
+    OpenAIError(String),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+
     #[error("JSON parsing error: {0}")]
     JsonError(#[from] serde_json::Error),
 
@@ -38,6 +44,14 @@ impl ServiceError {
             ServiceError::S3Error(_) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "Internal server error".to_string(),
+            ),
+            ServiceError::OpenAIError(_) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "AI service unavailable".to_string(),
+            ),
+            ServiceError::ConfigError(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Configuration error".to_string(),
             ),
             ServiceError::JsonError(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,

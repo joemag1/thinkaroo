@@ -1,10 +1,14 @@
+use async_openai::{
+    types::{ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs},
+    Client as OpenAIClient,
+};
 use axum::{extract::State, Json};
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::ServiceError;
+use crate::{prompts, ServiceError};
 
 const S3_BUCKET_NAME: &str = "thinkaroo-reading-stories";
 const MAX_STORIES_PER_HOUR: usize = 16;
@@ -19,6 +23,7 @@ pub struct ReadingContents {
 #[derive(Clone)]
 pub struct Reading {
     s3_client: S3Client,
+    openai_client: OpenAIClient<async_openai::config::OpenAIConfig>,
 }
 
 impl Default for Reading {
@@ -30,12 +35,18 @@ impl Default for Reading {
 }
 
 impl Reading {
-    /// Creates a new Reading instance with an initialized S3 client
+    /// Creates a new Reading instance with initialized S3 and OpenAI clients
     pub async fn new() -> Self {
         let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
         let s3_client = S3Client::new(&config);
 
-        Self { s3_client }
+        // OpenAI client will use OPENAI_API_KEY environment variable
+        let openai_client = OpenAIClient::new();
+
+        Self {
+            s3_client,
+            openai_client,
+        }
     }
 
     /// Gets a reading story from S3, generating a new one if needed
@@ -96,10 +107,44 @@ impl Reading {
         }
     }
 
-    /// Generates a new reading story (stub implementation)
+    /// Generates a new reading story using OpenAI
     async fn generate_story(&self) -> Result<ReadingContents, ServiceError> {
-        // TODO: Implement AI-based story generation
-        unimplemented!("Story generation not yet implemented")
+        // Get the reading comprehension prompt
+        let prompt_config = prompts::get_prompt("reading_comprehension")
+            .ok_or_else(|| ServiceError::ConfigError("Reading comprehension prompt not found".to_string()))?;
+
+        // Create chat completion request with just the user message (system prompt is in the config)
+        let request = CreateChatCompletionRequestArgs::default()
+            .model(&prompt_config.model)
+            .messages([
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content(prompt_config.prompt.text.clone())
+                    .build()
+                    .map_err(|e| ServiceError::OpenAIError(format!("Failed to build user message: {}", e)))?
+                    .into(),
+            ])
+            .build()
+            .map_err(|e| ServiceError::OpenAIError(format!("Failed to build request: {}", e)))?;
+
+        // Call OpenAI API
+        let response = self
+            .openai_client
+            .chat()
+            .create(request)
+            .await
+            .map_err(|e| ServiceError::OpenAIError(format!("OpenAI API call failed: {}", e)))?;
+
+        // Extract the content from the response
+        let content = response
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.as_ref())
+            .ok_or_else(|| ServiceError::OpenAIError("No content in OpenAI response".to_string()))?;
+
+        // Parse the JSON response
+        let reading_contents: ReadingContents = serde_json::from_str(content)?;
+
+        Ok(reading_contents)
     }
 
     /// Formats the S3 folder path as YYYY-MM-DD-HH/

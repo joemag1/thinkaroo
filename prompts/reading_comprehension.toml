@@ -1,8 +1,11 @@
 name = "reading_comprehension"
 description = "Generate a reading comprehension passage with questions"
+model = "gpt-4o-mini"
 
 [prompt]
 text = """
+You are a helpful assistant that generates educational reading comprehension passages for elementary school students.
+
 Generate a reading comprehension passage suitable for elementary school students.
 The passage should be engaging, educational, and age-appropriate.
 
