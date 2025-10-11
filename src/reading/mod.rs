@@ -1,5 +1,5 @@
 use async_openai::{
-    types::{ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs},
+    types::{ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs},
     Client as OpenAIClient,
 };
 use axum::{extract::State, Json};
@@ -113,10 +113,15 @@ impl Reading {
         let prompt_config = prompts::get_prompt("reading_comprehension")
             .ok_or_else(|| ServiceError::ConfigError("Reading comprehension prompt not found".to_string()))?;
 
-        // Create chat completion request with just the user message (system prompt is in the config)
+        // Create chat completion request with system context and user prompt
         let request = CreateChatCompletionRequestArgs::default()
             .model(&prompt_config.model)
             .messages([
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content(prompt_config.system_context.clone())
+                    .build()
+                    .map_err(|e| ServiceError::OpenAIError(format!("Failed to build system message: {}", e)))?
+                    .into(),
                 ChatCompletionRequestUserMessageArgs::default()
                     .content(prompt_config.prompt.text.clone())
                     .build()

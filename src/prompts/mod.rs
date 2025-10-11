@@ -10,6 +10,7 @@ pub struct PromptConfig {
     pub name: String,
     pub description: String,
     pub model: String,
+    pub system_context: String,
     pub prompt: PromptText,
 }
 
