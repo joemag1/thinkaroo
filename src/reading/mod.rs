@@ -18,74 +18,96 @@ pub struct ReadingContents {
     pub questions: Vec<String>,
 }
 
-/// Gets a reading story from S3, generating a new one if needed
-pub async fn get_from_s3(s3_client: &S3Client) -> Result<ReadingContents, ServiceError> {
-    let now = Utc::now();
-    let folder_path = format_s3_folder_path(&now);
+pub struct Reading {
+    s3_client: S3Client,
+}
 
-    // List all stories in the current hour's folder
-    let list_output = s3_client
-        .list_objects_v2()
-        .bucket(S3_BUCKET_NAME)
-        .prefix(&folder_path)
-        .send()
-        .await?;
-
-    let object_count = list_output.contents().len();
-
-    if object_count >= MAX_STORIES_PER_HOUR {
-        // Pick a random story from existing ones
-        let random_index = rand::random::<usize>() % object_count;
-        let object = &list_output.contents()[random_index];
-        let key = object.key().ok_or_else(|| {
-            ServiceError::S3Error("Object key is missing".to_string())
-        })?;
-
-        // Fetch and parse the story
-        let get_output = s3_client
-            .get_object()
-            .bucket(S3_BUCKET_NAME)
-            .key(key)
-            .send()
-            .await?;
-
-        let body_bytes = get_output.body.collect().await?.into_bytes();
-        let contents: ReadingContents = serde_json::from_slice(body_bytes.as_ref())?;
-
-        Ok(contents)
-    } else {
-        // Generate a new story
-        let contents = generate_story().await?;
-
-        // Store it in S3 with a random GUID
-        let guid = Uuid::new_v4();
-        let key = format!("{}{}.json", folder_path, guid);
-
-        let json_data = serde_json::to_string(&contents)?;
-
-        s3_client
-            .put_object()
-            .bucket(S3_BUCKET_NAME)
-            .key(&key)
-            .body(json_data.into_bytes().into())
-            .content_type("application/json")
-            .send()
-            .await?;
-
-        Ok(contents)
+impl Default for Reading {
+    fn default() -> Self {
+        // This will be initialized asynchronously in practice
+        // For now, this is a placeholder that will panic if called synchronously
+        unimplemented!("Use Reading::new() async constructor instead")
     }
 }
 
-/// Formats the S3 folder path as YYYY-MM-DD-HH/
-fn format_s3_folder_path(dt: &DateTime<Utc>) -> String {
-    format!("{}/", dt.format("%Y-%m-%d-%H"))
-}
+impl Reading {
+    /// Creates a new Reading instance with an initialized S3 client
+    pub async fn new() -> Self {
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let s3_client = S3Client::new(&config);
 
-/// Generates a new reading story (stub implementation)
-async fn generate_story() -> Result<ReadingContents, ServiceError> {
-    // TODO: Implement AI-based story generation
-    unimplemented!("Story generation not yet implemented")
-}
+        Self { s3_client }
+    }
+
+    /// Gets a reading story from S3, generating a new one if needed
+    pub async fn get_from_s3(&self) -> Result<ReadingContents, ServiceError> {
+        let now = Utc::now();
+        let folder_path = Self::format_s3_folder_path(&now);
+
+        // List all stories in the current hour's folder
+        let list_output = self.s3_client
+            .list_objects_v2()
+            .bucket(S3_BUCKET_NAME)
+            .prefix(&folder_path)
+            .send()
+            .await?;
+
+        let object_count = list_output.contents().len();
+
+        if object_count >= MAX_STORIES_PER_HOUR {
+            // Pick a random story from existing ones
+            let random_index = rand::random::<usize>() % object_count;
+            let object = &list_output.contents()[random_index];
+            let key = object.key().ok_or_else(|| {
+                ServiceError::S3Error("Object key is missing".to_string())
+            })?;
+
+            // Fetch and parse the story
+            let get_output = self.s3_client
+                .get_object()
+                .bucket(S3_BUCKET_NAME)
+                .key(key)
+                .send()
+                .await?;
+
+            let body_bytes = get_output.body.collect().await?.into_bytes();
+            let contents: ReadingContents = serde_json::from_slice(body_bytes.as_ref())?;
+
+            Ok(contents)
+        } else {
+            // Generate a new story
+            let contents = self.generate_story().await?;
+
+            // Store it in S3 with a random GUID
+            let guid = Uuid::new_v4();
+            let key = format!("{}{}.json", folder_path, guid);
+
+            let json_data = serde_json::to_string(&contents)?;
+
+            self.s3_client
+                .put_object()
+                .bucket(S3_BUCKET_NAME)
+                .key(&key)
+                .body(json_data.into_bytes().into())
+                .content_type("application/json")
+                .send()
+                .await?;
+
+            Ok(contents)
+        }
+    }
+
+    /// Generates a new reading story (stub implementation)
+    async fn generate_story(&self) -> Result<ReadingContents, ServiceError> {
+        // TODO: Implement AI-based story generation
+        unimplemented!("Story generation not yet implemented")
+    }
+
+    /// Formats the S3 folder path as YYYY-MM-DD-HH/
+    fn format_s3_folder_path(dt: &DateTime<Utc>) -> String {
+        format!("{}/", dt.format("%Y-%m-%d-%H"))
+    }}
+
 
 pub async fn reading_contents() -> Json<ReadingContents> {
     // todo: remove once we load actual contents.
