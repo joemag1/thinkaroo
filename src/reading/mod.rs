@@ -50,7 +50,7 @@ impl Reading {
     }
 
     /// Gets a reading story from S3, generating a new one if needed
-    pub async fn get_from_s3(&self) -> Result<ReadingContents, ServiceError> {
+    pub async fn get_reading_contents(&self) -> Result<ReadingContents, ServiceError> {
         let now = Utc::now();
         let folder_path = Self::format_s3_folder_path(&now);
 
@@ -162,7 +162,7 @@ pub async fn reading_contents(
     State(reading): State<Reading>,
 ) -> Result<Json<ReadingContents>, (axum::http::StatusCode, String)> {
     let contents = reading
-        .get_from_s3()
+        .get_reading_contents()
         .await
         .map_err(|e| e.into_status())?;
 

@@ -1,7 +1,11 @@
 name = "reading_comprehension"
 description = "Generate a reading comprehension passage with questions"
 model = "gpt-4o-mini"
-system_context = "You are a helpful assistant that generates educational reading comprehension passages for elementary school students."
+system_context = """
+You are a helpful assistant that generates educational reading comprehension passages and 
+questions for school students. Your content is sufficiently creative and interesting, but
+you avoid risque subjects.
+"""
 
 [prompt]
 text = """
