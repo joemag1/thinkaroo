@@ -1,6 +1,3 @@
-mod prompts;
-mod reading;
-
 use axum::{
     body::Body,
     http::{header, StatusCode},
@@ -8,6 +5,7 @@ use axum::{
     routing::get,
     Router,
 };
+use thinkaroo::{prompts, reading};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use tracing::{error, info};
