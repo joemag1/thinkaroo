@@ -36,7 +36,7 @@ impl ServiceError {
     pub fn into_status(self) -> (StatusCode, String) {
         match self {
             ServiceError::S3Error(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::SERVICE_UNAVAILABLE,
                 "Internal server error".to_string(),
             ),
             ServiceError::JsonError(_) => (
@@ -48,7 +48,7 @@ impl ServiceError {
                 "Data encoding error".to_string(),
             ),
             ServiceError::IoError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::SERVICE_UNAVAILABLE,
                 "I/O error".to_string(),
             ),
             ServiceError::ByteStreamError(_) => (

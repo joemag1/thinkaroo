@@ -5,7 +5,7 @@ use axum::{
     routing::get,
     Router,
 };
-use thinkaroo::{prompts, reading};
+use thinkaroo::{prompts, reading::{self, Reading}};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use tracing::{error, info};
@@ -60,12 +60,17 @@ async fn main() {
     let prompt_names = prompts::list_prompt_names();
     info!("Loaded {} prompts: {:?}", prompt_names.len(), prompt_names);
 
+    // Initialize Reading service
+    let reading_service = Reading::new().await;
+    info!("Initialized Reading service with S3 client");
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/home", get(home))
         .route("/", get(home))
         .route("/reading", get(reading))
-        .route("/reading_contents", get(reading::reading_contents));
+        .route("/reading_contents", get(reading::reading_contents))
+        .with_state(reading_service);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
         .await
