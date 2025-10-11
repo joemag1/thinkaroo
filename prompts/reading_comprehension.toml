@@ -1,0 +1,20 @@
+name = "reading_comprehension"
+description = "Generate a reading comprehension passage with questions"
+
+[prompt]
+text = """
+Generate a reading comprehension passage suitable for elementary school students.
+The passage should be engaging, educational, and age-appropriate.
+
+Include:
+- A compelling story or informational text (150-250 words)
+- 5 comprehension questions that test understanding
+- Questions should vary in difficulty (literal, inferential, and evaluative)
+
+Format the response as JSON with the following structure:
+{
+  "title": "passage title",
+  "story": "the passage text",
+  "questions": ["question 1", "question 2", ...]
+}
+"""

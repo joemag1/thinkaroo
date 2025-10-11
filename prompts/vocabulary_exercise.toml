@@ -1,0 +1,21 @@
+name = "vocabulary_exercise"
+description = "Generate vocabulary exercises with words and context"
+
+[prompt]
+text = """
+Generate a vocabulary exercise suitable for elementary school students.
+Select age-appropriate words and provide clear context.
+
+Include:
+- 5 vocabulary words with definitions
+- Example sentences for each word
+- A fill-in-the-blank exercise using the words
+
+Format the response as JSON with the following structure:
+{
+  "words": [
+    {"word": "word1", "definition": "definition1", "example": "example sentence"}
+  ],
+  "exercise": "fill in the blank exercise text"
+}
+"""

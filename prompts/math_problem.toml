@@ -1,0 +1,20 @@
+name = "math_problem"
+description = "Generate math problems appropriate for the student's level"
+
+[prompt]
+text = """
+Generate a math problem suitable for elementary school students.
+The problem should be challenging but appropriate for the grade level.
+
+Include:
+- A clear problem statement
+- The correct answer
+- Step-by-step solution explanation
+
+Format the response as JSON with the following structure:
+{
+  "problem": "problem statement",
+  "answer": "correct answer",
+  "explanation": "step by step solution"
+}
+"""
