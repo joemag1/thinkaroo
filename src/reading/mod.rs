@@ -1,9 +1,13 @@
-use axum::{Json, extract::State};
+use axum::{extract::State, Json};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::state::{AppState, ContentType};
+use crate::{
+    prompts,
+    state::{AppState, ContentType},
+};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema)]
 pub struct ReadingContents {
     pub title: String,
     pub story: String,
@@ -21,8 +25,23 @@ pub async fn reading_contents(
     {
         contents
     } else {
-        // No cached story available, generate a new one
-        let contents = state.generate_story().await.map_err(|e| e.into_status())?;
+        // Load the reading comprehension prompt configuration
+        let prompt_config = prompts::get_prompt("reading_comprehension").ok_or_else(|| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Reading comprehension prompt not found".to_string(),
+            )
+        })?;
+
+        // Generate new reading content using the generic generate_content method
+        let contents: ReadingContents = state
+            .generate_content(
+                prompt_config,
+                "ReadingContents",
+                "A reading comprehension passage with questions",
+            )
+            .await
+            .map_err(|e| e.into_status())?;
 
         // Store it for future use
         state

@@ -1,10 +1,11 @@
 use async_openai::{
     types::{
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        CreateChatCompletionRequestArgs,
+        CreateChatCompletionRequestArgs, ResponseFormat, ResponseFormatJsonSchema,
     },
     Client as OpenAIClient,
 };
+use schemars::schema_for;
 use aws_sdk_bedrockruntime::Client as BedrockClient;
 use aws_sdk_dynamodb::Client as DynamoDbClient;
 use aws_sdk_s3::Client as S3Client;
@@ -12,7 +13,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{prompts, reading::ReadingContents, ServiceError};
+use crate::{prompts::PromptConfig, ServiceError};
 
 /// S3 bucket name for storing timed objects
 const S3_BUCKET_NAME: &str = "thinkaroo-reading-stories";
@@ -224,16 +225,51 @@ impl AppState {
         format!("{}/{}/", content_type.prefix(), dt.format("%Y-%m-%d-%H"))
     }
 
-    /// Generates a new reading story using OpenAI
-    pub async fn generate_story(&self) -> Result<ReadingContents, ServiceError> {
-        // Get the reading comprehension prompt
-        let prompt_config = prompts::get_prompt("reading_comprehension").ok_or_else(|| {
-            ServiceError::ConfigError("Reading comprehension prompt not found".to_string())
+    /// Generates content using OpenAI with structured JSON output
+    ///
+    /// This method uses OpenAI's structured output feature to generate content
+    /// that strictly adheres to the provided type's JSON schema.
+    ///
+    /// # Type Parameters
+    /// * `T` - The type of content to generate. Must implement Serialize, Deserialize, and JsonSchema.
+    ///
+    /// # Arguments
+    /// * `prompt_config` - The prompt configuration containing model, system context, and user prompt
+    /// * `schema_name` - A name for the JSON schema (e.g., "ReadingContents")
+    /// * `schema_description` - A description of what the schema represents
+    ///
+    /// # Returns
+    /// * `Ok(T)` - The generated content parsed into type T
+    /// * `Err(ServiceError)` - If generation or parsing fails
+    pub async fn generate_content<T>(
+        &self,
+        prompt_config: &PromptConfig,
+        schema_name: &str,
+        schema_description: &str,
+    ) -> Result<T, ServiceError>
+    where
+        T: for<'de> Deserialize<'de> + Serialize + schemars::JsonSchema,
+    {
+        // Generate JSON schema for the type T
+        let schema = schema_for!(T);
+        let schema_value = serde_json::to_value(schema).map_err(|e| {
+            ServiceError::ConfigError(format!("Failed to serialize schema: {}", e))
         })?;
+
+        // Create response format with JSON schema
+        let response_format = ResponseFormat::JsonSchema {
+            json_schema: ResponseFormatJsonSchema {
+                description: Some(schema_description.to_string()),
+                name: schema_name.to_string(),
+                schema: Some(schema_value),
+                strict: Some(true),
+            },
+        };
 
         // Create chat completion request with system context and user prompt
         let request = CreateChatCompletionRequestArgs::default()
             .model(&prompt_config.model)
+            .response_format(response_format)
             .messages([
                 ChatCompletionRequestSystemMessageArgs::default()
                     .content(prompt_config.system_context.clone())
@@ -268,9 +304,9 @@ impl AppState {
             .and_then(|choice| choice.message.content.as_ref())
             .ok_or_else(|| ServiceError::OpenAIError("No content in OpenAI response".to_string()))?;
 
-        // Parse the JSON response
-        let reading_contents: ReadingContents = serde_json::from_str(content)?;
+        // Parse the JSON response into the target type
+        let result: T = serde_json::from_str(content)?;
 
-        Ok(reading_contents)
+        Ok(result)
     }
 }
