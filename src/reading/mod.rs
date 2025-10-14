@@ -1,11 +1,9 @@
 use axum::{extract::State, Json};
+use axum::response::IntoResponse;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    prompts,
-    state::{AppState, ContentType},
-};
+use crate::{prompts, state::{AppState, ContentType}, ServiceError};
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 pub struct ReadingContents {
@@ -26,12 +24,9 @@ pub async fn reading_contents(
         contents
     } else {
         // Load the reading comprehension prompt configuration
-        let prompt_config = prompts::get_prompt("reading_comprehension").ok_or_else(|| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Reading comprehension prompt not found".to_string(),
-            )
-        })?;
+        let prompt_config = prompts::get_prompt("reading_comprehension")
+            .ok_or_else(|| ServiceError::ConfigError("reading_comprehension".into()))
+            .map_err(|e| e.into_status())?;
 
         // Generate new reading content using the generic generate_content method
         let contents: ReadingContents = state
