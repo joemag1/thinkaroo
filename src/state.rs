@@ -1,4 +1,10 @@
-use async_openai::Client as OpenAIClient;
+use async_openai::{
+    types::{
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        CreateChatCompletionRequestArgs,
+    },
+    Client as OpenAIClient,
+};
 use aws_sdk_bedrockruntime::Client as BedrockClient;
 use aws_sdk_dynamodb::Client as DynamoDbClient;
 use aws_sdk_s3::Client as S3Client;
@@ -6,7 +12,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::ServiceError;
+use crate::{prompts, reading::ReadingContents, ServiceError};
 
 /// S3 bucket name for storing timed objects
 const S3_BUCKET_NAME: &str = "thinkaroo-reading-stories";
@@ -216,5 +222,55 @@ impl AppState {
     /// A formatted string like "reading/2025-10-11-14/"
     fn format_timed_prefix(dt: &DateTime<Utc>, content_type: ContentType) -> String {
         format!("{}/{}/", content_type.prefix(), dt.format("%Y-%m-%d-%H"))
+    }
+
+    /// Generates a new reading story using OpenAI
+    pub async fn generate_story(&self) -> Result<ReadingContents, ServiceError> {
+        // Get the reading comprehension prompt
+        let prompt_config = prompts::get_prompt("reading_comprehension").ok_or_else(|| {
+            ServiceError::ConfigError("Reading comprehension prompt not found".to_string())
+        })?;
+
+        // Create chat completion request with system context and user prompt
+        let request = CreateChatCompletionRequestArgs::default()
+            .model(&prompt_config.model)
+            .messages([
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content(prompt_config.system_context.clone())
+                    .build()
+                    .map_err(|e| {
+                        ServiceError::OpenAIError(format!("Failed to build system message: {}", e))
+                    })?
+                    .into(),
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content(prompt_config.prompt.text.clone())
+                    .build()
+                    .map_err(|e| {
+                        ServiceError::OpenAIError(format!("Failed to build user message: {}", e))
+                    })?
+                    .into(),
+            ])
+            .build()
+            .map_err(|e| ServiceError::OpenAIError(format!("Failed to build request: {}", e)))?;
+
+        // Call OpenAI API
+        let response = self
+            .openai_client
+            .chat()
+            .create(request)
+            .await
+            .map_err(|e| ServiceError::OpenAIError(format!("OpenAI API call failed: {}", e)))?;
+
+        // Extract the content from the response
+        let content = response
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.as_ref())
+            .ok_or_else(|| ServiceError::OpenAIError("No content in OpenAI response".to_string()))?;
+
+        // Parse the JSON response
+        let reading_contents: ReadingContents = serde_json::from_str(content)?;
+
+        Ok(reading_contents)
     }
 }
