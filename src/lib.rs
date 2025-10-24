@@ -1,3 +1,4 @@
+pub mod keyvalue;
 pub mod prompts;
 pub mod reading;
 pub mod state;
@@ -11,6 +12,9 @@ use thiserror::Error;
 pub enum ServiceError {
     #[error("S3 error: {0}")]
     S3Error(String),
+
+    #[error("DynamoDB error: {0}")]
+    DynamoDbError(String),
 
     #[error("OpenAI API error: {0}")]
     OpenAIError(String),
@@ -46,6 +50,10 @@ impl ServiceError {
             ServiceError::S3Error(_) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "Internal server error".to_string(),
+            ),
+            ServiceError::DynamoDbError(_) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Database service unavailable".to_string(),
             ),
             ServiceError::OpenAIError(_) => (
                 StatusCode::SERVICE_UNAVAILABLE,

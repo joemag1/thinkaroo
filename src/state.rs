@@ -6,13 +6,11 @@ use async_openai::{
     Client as OpenAIClient,
 };
 use schemars::schema_for;
-use aws_sdk_bedrockruntime::Client as BedrockClient;
-use aws_sdk_dynamodb::Client as DynamoDbClient;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{prompts::PromptConfig, storage::ObjectStore, ServiceError};
+use crate::{keyvalue::KeyValueStore, prompts::PromptConfig, storage::ObjectStore, ServiceError};
 
 /// Maximum number of objects to store per hour before reusing existing ones
 const MAX_OBJECTS_PER_HOUR: usize = 16;
@@ -33,54 +31,48 @@ impl ContentType {
 }
 
 /// Application-wide state that can be shared across all routes
-/// Generic over the storage implementation to allow different backends
+/// Generic over the storage implementations to allow different backends
 #[derive(Clone)]
-pub struct AppState<S: ObjectStore> {
-    /// Storage backend for object storage operations
+pub struct AppState<S: ObjectStore, K: KeyValueStore> {
+    /// Object storage backend for blob storage operations
     pub object_store: S,
 
-    /// DynamoDB client for database operations
-    pub dynamodb_client: DynamoDbClient,
+    /// Key-value store backend for database operations
+    pub kv_store: K,
 
     /// OpenAI client for OpenAI API interactions
     pub openai_client: OpenAIClient<async_openai::config::OpenAIConfig>,
 }
 
-impl<S: ObjectStore> AppState<S> {
+impl<S: ObjectStore, K: KeyValueStore> AppState<S, K> {
     /// Creates a new AppState with all clients initialized
     ///
-    /// This function loads AWS credentials from the default credential chain
-    /// and creates instances of all required service clients.
-    ///
     /// # Arguments
-    /// * `storage` - The storage implementation to use
+    /// * `object_store` - The object storage implementation to use
+    /// * `kv_store` - The key-value store implementation to use
     ///
     /// # Example
     /// ```no_run
     /// use thinkaroo::state::AppState;
     /// use thinkaroo::storage::S3ObjectStore;
+    /// use thinkaroo::keyvalue::DynamoKeyValueStore;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
-    ///     let storage = S3ObjectStore::new(aws_sdk_s3::Client::new(&config));
-    ///     let state = AppState::new(storage).await;
+    ///     let object_store = S3ObjectStore::new(aws_sdk_s3::Client::new(&config));
+    ///     let kv_store = DynamoKeyValueStore::new(aws_sdk_dynamodb::Client::new(&config));
+    ///     let state = AppState::new(object_store, kv_store).await;
     ///     // Use state with your Axum router
     /// }
     /// ```
-    pub async fn new(object_store: S) -> Self {
-        // Load AWS configuration from environment
-        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
-
-        // Initialize AWS clients
-        let dynamodb_client = DynamoDbClient::new(&config);
-
+    pub async fn new(object_store: S, kv_store: K) -> Self {
         // Initialize OpenAI client (uses OPENAI_API_KEY environment variable)
         let openai_client = OpenAIClient::new();
 
         Self {
-            object_store: object_store,
-            dynamodb_client,
+            object_store,
+            kv_store,
             openai_client,
         }
     }

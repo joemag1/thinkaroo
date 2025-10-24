@@ -5,7 +5,7 @@ use axum::{
     routing::get,
     Router,
 };
-use thinkaroo::{prompts, reading, state::AppState, storage::S3ObjectStore};
+use thinkaroo::{keyvalue::DynamoKeyValueStore, prompts, reading, state::AppState, storage::S3ObjectStore};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use tracing::{error, info};
@@ -60,13 +60,14 @@ async fn main() {
     let prompt_names = prompts::list_prompt_names();
     info!("Loaded {} prompts: {:?}", prompt_names.len(), prompt_names);
 
-    // Initialize AWS configuration and S3 storage
+    // Initialize AWS configuration and storage backends
     let aws_config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
-    let s3_storage = S3ObjectStore::new(aws_sdk_s3::Client::new(&aws_config));
+    let object_store = S3ObjectStore::new(aws_sdk_s3::Client::new(&aws_config));
+    let kv_store = DynamoKeyValueStore::new(aws_sdk_dynamodb::Client::new(&aws_config));
 
     // Initialize application state with all clients
-    let app_state = AppState::new(s3_storage).await;
-    info!("Initialized AppState with S3 storage, DynamoDB, Bedrock, and OpenAI clients");
+    let app_state = AppState::new(object_store, kv_store).await;
+    info!("Initialized AppState with S3 object storage, DynamoDB key-value store, and OpenAI client");
 
     let app = Router::new()
         .route("/health", get(health))
