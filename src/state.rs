@@ -8,20 +8,16 @@ use async_openai::{
 use schemars::schema_for;
 use aws_sdk_bedrockruntime::Client as BedrockClient;
 use aws_sdk_dynamodb::Client as DynamoDbClient;
-use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{prompts::PromptConfig, ServiceError};
-
-/// S3 bucket name for storing timed objects
-const S3_BUCKET_NAME: &str = "thinkaroo-reading-stories";
+use crate::{prompts::PromptConfig, storage::ObjectStore, ServiceError};
 
 /// Maximum number of objects to store per hour before reusing existing ones
 const MAX_OBJECTS_PER_HOUR: usize = 16;
 
-/// Content type enum for organizing S3 objects by type
+/// Content type enum for organizing storage objects by type
 #[derive(Debug, Clone, Copy)]
 pub enum ContentType {
     Reading,
@@ -29,7 +25,7 @@ pub enum ContentType {
 
 impl ContentType {
     /// Returns the string prefix for this content type
-    fn prefix(&self) -> &'static str {
+    pub fn prefix(&self) -> &'static str {
         match self {
             ContentType::Reading => "reading",
         }
@@ -37,59 +33,59 @@ impl ContentType {
 }
 
 /// Application-wide state that can be shared across all routes
-/// Contains AWS clients (S3, DynamoDB, Bedrock) and OpenAI client
+/// Generic over the storage implementation to allow different backends
 #[derive(Clone)]
-pub struct AppState {
-    /// S3 client for object storage operations
-    pub s3_client: S3Client,
+pub struct AppState<S: ObjectStore> {
+    /// Storage backend for object storage operations
+    pub object_store: S,
 
     /// DynamoDB client for database operations
     pub dynamodb_client: DynamoDbClient,
-
-    /// Bedrock client for AWS AI model interactions
-    pub bedrock_client: BedrockClient,
 
     /// OpenAI client for OpenAI API interactions
     pub openai_client: OpenAIClient<async_openai::config::OpenAIConfig>,
 }
 
-impl AppState {
+impl<S: ObjectStore> AppState<S> {
     /// Creates a new AppState with all clients initialized
     ///
     /// This function loads AWS credentials from the default credential chain
     /// and creates instances of all required service clients.
     ///
+    /// # Arguments
+    /// * `storage` - The storage implementation to use
+    ///
     /// # Example
     /// ```no_run
     /// use thinkaroo::state::AppState;
+    /// use thinkaroo::storage::S3ObjectStore;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let state = AppState::new().await;
+    ///     let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    ///     let storage = S3ObjectStore::new(aws_sdk_s3::Client::new(&config));
+    ///     let state = AppState::new(storage).await;
     ///     // Use state with your Axum router
     /// }
     /// ```
-    pub async fn new() -> Self {
+    pub async fn new(object_store: S) -> Self {
         // Load AWS configuration from environment
         let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
 
         // Initialize AWS clients
-        let s3_client = S3Client::new(&config);
         let dynamodb_client = DynamoDbClient::new(&config);
-        let bedrock_client = BedrockClient::new(&config);
 
         // Initialize OpenAI client (uses OPENAI_API_KEY environment variable)
         let openai_client = OpenAIClient::new();
 
         Self {
-            s3_client,
+            object_store: object_store,
             dynamodb_client,
-            bedrock_client,
             openai_client,
         }
     }
 
-    /// Gets a random timed object from S3 for the current hour
+    /// Gets a random timed object from storage for the current hour
     ///
     /// This method implements a time-based caching strategy where objects are organized
     /// by content type and hourly time slots. Returns `None` if the current hour's folder
@@ -97,7 +93,7 @@ impl AppState {
     /// be generated. Otherwise, returns a random existing object from the current hour.
     ///
     /// # Type Parameters
-    /// * `T` - The type to deserialize from S3. Must implement Deserialize.
+    /// * `T` - The type to deserialize from storage. Must implement Deserialize.
     ///
     /// # Arguments
     /// * `content_type` - The type of content being requested (e.g., Reading)
@@ -105,11 +101,12 @@ impl AppState {
     /// # Returns
     /// * `Ok(Some(T))` - A random object from the current hour's cache
     /// * `Ok(None)` - No cached object available (generate new content)
-    /// * `Err(ServiceError)` - If S3 operations fail
+    /// * `Err(ServiceError)` - If storage operations fail
     ///
     /// # Example
     /// ```no_run
     /// use thinkaroo::state::{AppState, ContentType};
+    /// use thinkaroo::storage::S3ObjectStore;
     /// use serde::{Deserialize, Serialize};
     ///
     /// #[derive(Serialize, Deserialize)]
@@ -117,7 +114,7 @@ impl AppState {
     ///     data: String,
     /// }
     ///
-    /// # async fn example(state: AppState) -> Result<(), thinkaroo::ServiceError> {
+    /// # async fn example<S: thinkaroo::storage::ObjectStore>(state: AppState<S>) -> Result<(), thinkaroo::ServiceError> {
     /// let content: Option<MyContent> = state
     ///     .get_timed_object(ContentType::Reading)
     ///     .await?;
@@ -135,35 +132,17 @@ impl AppState {
         let folder_path = Self::format_timed_prefix(&now, content_type);
 
         // List all objects in the current hour's folder for this content type
-        let list_output = self
-            .s3_client
-            .list_objects_v2()
-            .bucket(S3_BUCKET_NAME)
-            .prefix(&folder_path)
-            .send()
-            .await?;
-
-        let object_count = list_output.contents().len();
+        let objects = self.object_store.list_objects(&folder_path).await?;
+        let object_count = objects.len();
 
         if object_count >= MAX_OBJECTS_PER_HOUR {
             // Pick a random object from existing ones
             let random_index = rand::random::<usize>() % object_count;
-            let object = &list_output.contents()[random_index];
-            let key = object
-                .key()
-                .ok_or_else(|| ServiceError::S3Error("Object key is missing".to_string()))?;
+            let key = &objects[random_index].key;
 
             // Fetch and parse the object
-            let get_output = self
-                .s3_client
-                .get_object()
-                .bucket(S3_BUCKET_NAME)
-                .key(key)
-                .send()
-                .await?;
-
-            let body_bytes = get_output.body.collect().await?.into_bytes();
-            let contents: T = serde_json::from_slice(body_bytes.as_ref())?;
+            let body_bytes = self.object_store.get_object(key).await?;
+            let contents: T = serde_json::from_slice(&body_bytes)?;
 
             Ok(Some(contents))
         } else {
@@ -172,7 +151,7 @@ impl AppState {
         }
     }
 
-    /// Stores an object in S3 with a time-based key
+    /// Stores an object in storage with a time-based key
     ///
     /// Objects are stored with keys in the format:
     /// `{content_type_prefix}/{YYYY-MM-DD-HH}/{guid}.json`
@@ -183,14 +162,14 @@ impl AppState {
     ///
     /// # Returns
     /// * `Ok(())` - If the object was successfully stored
-    /// * `Err(ServiceError)` - If serialization or S3 operations fail
+    /// * `Err(ServiceError)` - If serialization or storage operations fail
     pub async fn store_timed_object<T>(
         &self,
         object: &T,
         content_type: ContentType,
     ) -> Result<(), ServiceError>
     where
-        T: Serialize,
+        T: Serialize + Sync,
     {
         let now = Utc::now();
         let folder_path = Self::format_timed_prefix(&now, content_type);
@@ -199,19 +178,12 @@ impl AppState {
 
         let json_data = serde_json::to_string(object)?;
 
-        self.s3_client
-            .put_object()
-            .bucket(S3_BUCKET_NAME)
-            .key(&key)
-            .body(json_data.into_bytes().into())
-            .content_type("application/json")
-            .send()
-            .await?;
+        self.object_store.put_object(&key, json_data.into_bytes()).await?;
 
         Ok(())
     }
 
-    /// Formats the S3 prefix with content type and timestamp
+    /// Formats the storage prefix with content type and timestamp
     ///
     /// Format: `{content_type_prefix}/{YYYY-MM-DD-HH}/`
     ///

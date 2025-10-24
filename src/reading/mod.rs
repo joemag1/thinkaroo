@@ -1,9 +1,8 @@
 use axum::{extract::State, Json};
-use axum::response::IntoResponse;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{prompts, state::{AppState, ContentType}, ServiceError};
+use crate::{prompts, state::{AppState, ContentType}, storage::ObjectStore, ServiceError};
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 pub struct ReadingContents {
@@ -12,8 +11,8 @@ pub struct ReadingContents {
     pub questions: Vec<String>,
 }
 
-pub async fn reading_contents(
-    State(state): State<AppState>,
+pub async fn reading_contents<S: ObjectStore>(
+    State(state): State<AppState<S>>,
 ) -> Result<Json<ReadingContents>, (axum::http::StatusCode, String)> {
     // Try to get an existing cached story
     let contents = if let Some(contents) = state

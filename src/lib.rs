@@ -1,6 +1,7 @@
 pub mod prompts;
 pub mod reading;
 pub mod state;
+pub mod storage;
 
 use axum::http::StatusCode;
 use aws_smithy_types::byte_stream::error::Error as ByteStreamError;
