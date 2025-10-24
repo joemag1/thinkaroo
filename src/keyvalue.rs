@@ -107,11 +107,15 @@ impl KeyValueStore for DynamoKeyValueStore {
             AttributeValue::S(key),
         );
 
+        // Build projection expression to only retrieve requested columns
+        let projection_expression = column_names.join(", ");
+
         let result = self
             .client
             .get_item()
             .table_name(DYNAMODB_TABLE_NAME)
             .set_key(Some(key_map))
+            .projection_expression(projection_expression)
             .send()
             .await
             .map_err(|e| ServiceError::DynamoDbError(e.to_string()))?;
