@@ -1,14 +1,14 @@
 use async_trait::async_trait;
 use aws_sdk_s3::Client as S3Client;
 use std::path::PathBuf;
-
+use tracing::warn;
 use crate::ServiceError;
 
 /// S3 bucket name for storing objects
 const S3_BUCKET_NAME: &str = "thinkaroo-reading-stories";
 
 /// Base directory for disk storage
-const DISK_STORAGE_BASE: &str = "./storage";
+const DISK_STORAGE_BASE: &str = "/tmp/thinkaroo/storage";
 
 /// Represents a stored object with its key
 #[derive(Debug, Clone)]
@@ -126,14 +126,28 @@ pub struct DiskObjectStore {
 
 impl DiskObjectStore {
     /// Creates a new DiskStorage instance with the default base path
+    ///
+    /// Creates the base directory if it doesn't exist.
     pub fn new() -> Self {
-        Self {
-            base_path: PathBuf::from(DISK_STORAGE_BASE),
+        let base_path = PathBuf::from(DISK_STORAGE_BASE);
+
+        // Create base directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&base_path) {
+            warn!("Warning: Failed to create base directory {:?}: {}", base_path, e);
         }
+
+        Self { base_path }
     }
 
     /// Creates a new DiskStorage instance with a custom base path
+    ///
+    /// Creates the base directory if it doesn't exist.
     pub fn with_base_path(base_path: PathBuf) -> Self {
+        // Create base directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&base_path) {
+            eprintln!("Warning: Failed to create base directory {:?}: {}", base_path, e);
+        }
+
         Self { base_path }
     }
 

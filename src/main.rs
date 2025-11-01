@@ -9,6 +9,8 @@ use thinkaroo::{keyvalue::DynamoKeyValueStore, prompts, reading, state::AppState
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use tracing::{error, info};
+use thinkaroo::keyvalue::MemoryKeyValueStore;
+use thinkaroo::storage::DiskObjectStore;
 
 async fn health() -> &'static str {
     "OK"
@@ -62,11 +64,18 @@ async fn main() {
 
     // Initialize AWS configuration and storage backends
     let aws_config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
-    let object_store = S3ObjectStore::new(aws_sdk_s3::Client::new(&aws_config));
-    let kv_store = DynamoKeyValueStore::new(aws_sdk_dynamodb::Client::new(&aws_config));
+    //let object_store = S3ObjectStore::new(aws_sdk_s3::Client::new(&aws_config));
+    let object_store = DiskObjectStore::new();
+
+    //let kv_store = DynamoKeyValueStore::new(aws_sdk_dynamodb::Client::new(&aws_config));
+    let kv_store = MemoryKeyValueStore::new();
+
+    // Get OpenAI API key from environment
+    let openai_api_key = std::env::var("OPENAI_API_KEY")
+        .expect("OPENAI_API_KEY environment variable must be set");
 
     // Initialize application state with all clients
-    let app_state = AppState::new(object_store, kv_store).await;
+    let app_state = AppState::new(object_store, kv_store, openai_api_key).await;
     info!("Initialized AppState with S3 object storage, DynamoDB key-value store, and OpenAI client");
 
     let app = Router::new()

@@ -1,4 +1,5 @@
 use async_openai::{
+    config::OpenAIConfig,
     types::{
         responses::{
             CreateResponseArgs, Input, InputItem, InputMessageArgs, Role, TextConfig,
@@ -53,6 +54,7 @@ impl<S: ObjectStore, K: KeyValueStore> AppState<S, K> {
     /// # Arguments
     /// * `object_store` - The object storage implementation to use
     /// * `kv_store` - The key-value store implementation to use
+    /// * `openai_api_key` - The OpenAI API key to use for API requests
     ///
     /// # Example
     /// ```no_run
@@ -65,13 +67,15 @@ impl<S: ObjectStore, K: KeyValueStore> AppState<S, K> {
     ///     let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
     ///     let object_store = S3ObjectStore::new(aws_sdk_s3::Client::new(&config));
     ///     let kv_store = DynamoKeyValueStore::new(aws_sdk_dynamodb::Client::new(&config));
-    ///     let state = AppState::new(object_store, kv_store).await;
+    ///     let api_key = std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
+    ///     let state = AppState::new(object_store, kv_store, api_key).await;
     ///     // Use state with your Axum router
     /// }
     /// ```
-    pub async fn new(object_store: S, kv_store: K) -> Self {
-        // Initialize OpenAI client (uses OPENAI_API_KEY environment variable)
-        let openai_client = OpenAIClient::new();
+    pub async fn new(object_store: S, kv_store: K, openai_api_key: String) -> Self {
+        // Initialize OpenAI client with the provided API key
+        let openai_config = OpenAIConfig::new().with_api_key(openai_api_key);
+        let openai_client = OpenAIClient::with_config(openai_config);
 
         Self {
             object_store,
@@ -264,6 +268,7 @@ impl<S: ObjectStore, K: KeyValueStore> AppState<S, K> {
         // Create response request
         let request = CreateResponseArgs::default()
             .model(&prompt_config.model)
+            .stream(false)
             .text(text_config)
             .input(input)
             .build()
