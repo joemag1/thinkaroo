@@ -1,7 +1,10 @@
 use async_openai::{
     types::{
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        CreateChatCompletionRequestArgs, ResponseFormat, ResponseFormatJsonSchema,
+        responses::{
+            CreateResponseArgs, Input, InputItem, InputMessageArgs, Role, TextConfig,
+            TextResponseFormat,
+        },
+        ResponseFormatJsonSchema,
     },
     Client as OpenAIClient,
 };
@@ -220,53 +223,65 @@ impl<S: ObjectStore, K: KeyValueStore> AppState<S, K> {
             ServiceError::ConfigError(format!("Failed to serialize schema: {}", e))
         })?;
 
-        // Create response format with JSON schema
-        let response_format = ResponseFormat::JsonSchema {
-            json_schema: ResponseFormatJsonSchema {
-                description: Some(schema_description.to_string()),
-                name: schema_name.to_string(),
-                schema: Some(schema_value),
-                strict: Some(true),
-            },
+        // Create JSON schema response format
+        let json_schema = ResponseFormatJsonSchema {
+            description: Some(schema_description.to_string()),
+            name: schema_name.to_string(),
+            schema: Some(schema_value),
+            strict: Some(true),
         };
 
-        // Create chat completion request with system context and user prompt
-        let request = CreateChatCompletionRequestArgs::default()
+        // Create text config with JSON schema format
+        let text_config = TextConfig {
+            format: TextResponseFormat::JsonSchema(json_schema),
+            verbosity: None,
+        };
+
+        // Create system message input item
+        let system_message = InputMessageArgs::default()
+            .role(Role::System)
+            .content(prompt_config.system_context.clone())
+            .build()
+            .map_err(|e| {
+                ServiceError::OpenAIError(format!("Failed to build system message: {}", e))
+            })?;
+
+        // Create user message input item
+        let user_message = InputMessageArgs::default()
+            .role(Role::User)
+            .content(prompt_config.prompt.text.clone())
+            .build()
+            .map_err(|e| {
+                ServiceError::OpenAIError(format!("Failed to build user message: {}", e))
+            })?;
+
+        // Create input with both messages
+        let input = Input::Items(vec![
+            InputItem::Message(system_message),
+            InputItem::Message(user_message),
+        ]);
+
+        // Create response request
+        let request = CreateResponseArgs::default()
             .model(&prompt_config.model)
-            .response_format(response_format)
-            .messages([
-                ChatCompletionRequestSystemMessageArgs::default()
-                    .content(prompt_config.system_context.clone())
-                    .build()
-                    .map_err(|e| {
-                        ServiceError::OpenAIError(format!("Failed to build system message: {}", e))
-                    })?
-                    .into(),
-                ChatCompletionRequestUserMessageArgs::default()
-                    .content(prompt_config.prompt.text.clone())
-                    .build()
-                    .map_err(|e| {
-                        ServiceError::OpenAIError(format!("Failed to build user message: {}", e))
-                    })?
-                    .into(),
-            ])
+            .text(text_config)
+            .input(input)
             .build()
             .map_err(|e| ServiceError::OpenAIError(format!("Failed to build request: {}", e)))?;
 
-        // Call OpenAI API
+        // Call OpenAI Responses API
         let response = self
             .openai_client
-            .chat()
+            .responses()
             .create(request)
             .await
             .map_err(|e| ServiceError::OpenAIError(format!("OpenAI API call failed: {}", e)))?;
 
-        // Extract the content from the response
+        // Extract the aggregated text content from the response
         let content = response
-            .choices
-            .first()
-            .and_then(|choice| choice.message.content.as_ref())
-            .ok_or_else(|| ServiceError::OpenAIError("No content in OpenAI response".to_string()))?;
+            .output_text
+            .as_deref()
+            .ok_or_else(|| ServiceError::OpenAIError("No text content in OpenAI response".to_string()))?;
 
         // Parse the JSON response into the target type
         let result: T = serde_json::from_str(content)?;

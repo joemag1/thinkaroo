@@ -8,7 +8,7 @@ name = "thinkaroo"
 path = "src/lib.rs"
 
 [dependencies]
-async-openai = "0.24"
+async-openai = "0.30"
 async-trait = "0.1"
 axum = "0.8"
 aws-config = "1"
