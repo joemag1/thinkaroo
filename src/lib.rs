@@ -7,6 +7,7 @@ pub mod storage;
 use axum::http::StatusCode;
 use aws_smithy_types::byte_stream::error::Error as ByteStreamError;
 use thiserror::Error;
+use tracing::warn;
 
 #[derive(Error, Debug)]
 pub enum ServiceError {
@@ -46,6 +47,7 @@ where
 
 impl ServiceError {
     pub fn into_status(self) -> (StatusCode, String) {
+        warn!("Service error: {:?}", self);
         match self {
             ServiceError::S3Error(_) => (
                 StatusCode::SERVICE_UNAVAILABLE,
